@@ -1,0 +1,17 @@
+youtube_transcript_api 
+webvtt-py
+yt-dlp
+deepgram-sdk
+python-dotenv
+deepgram_captions
+googletrans
+transformers
+opencv-python
+torch
+pillow
+accelerate
+chromadb
+django
+djangorestframework
+
+
