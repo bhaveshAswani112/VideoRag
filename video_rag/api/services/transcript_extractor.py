@@ -1,66 +1,102 @@
 import os
+import asyncio
 from deepgram import DeepgramClient, PrerecordedOptions, FileSource
 from deepgram_captions import DeepgramConverter, webvtt
 from googletrans import Translator
 import webvtt as wvt
-import asyncio
+from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.formatters import WebVTTFormatter
 
+class CaptionProcessor:
+    def __init__(self, deepgram_api_key=None):
+        self.deepgram = DeepgramClient(deepgram_api_key) if deepgram_api_key else DeepgramClient()
+        self.translator = Translator()
+        
+    async def _translate_vtt(self, input_file, output_file, target_lang="en"):
+        """Internal method to translate WebVTT captions"""
+        try:
+            vtt = wvt.read(input_file)
+            for caption in vtt:
+                translated = await self.translator.translate(caption.text, dest=target_lang)
+                caption.text = translated.text
+            vtt.save(output_file)
+            return True
+        except Exception as e:
+            print(f"Translation error: {str(e)}")
+            return False
 
-def extract_audio_captions(audio_file, output_file):
-    try:
-        # Create a Deepgram client
-        deepgram = DeepgramClient()
+    def _get_youtube_transcript(self, video_id, output_file):
+        """Try to get native YouTube transcript"""
+        try:
+            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            formatter = WebVTTFormatter()
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(formatter.format_transcript(transcript))
+            return True
+        except Exception as e:
+            print(f"YouTube transcript API failed: {str(e)}")
+            return False
 
-        with open(audio_file, "rb") as file:
-            buffer_data = file.read()
+    def _deepgram_transcribe(self, audio_file, output_file, language="hi"):
+        """Fallback to Deepgram speech-to-text"""
+        try:
+            with open(audio_file, "rb") as file:
+                buffer_data = file.read()
 
-        payload: FileSource = {
-            "buffer": buffer_data,
-        }
+            response = self.deepgram.listen.rest.v("1").transcribe_file(
+                {"buffer": buffer_data},
+                PrerecordedOptions(
+                    model="nova-2",
+                    smart_format=True,
+                    language=language
+                )
+            )
+            
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(webvtt(DeepgramConverter(response.to_dict())))
+            return True
+        except Exception as e:
+            print(f"Deepgram transcription failed: {str(e)}")
+            return False
 
-        # Configure Deepgram options
-        options = PrerecordedOptions(
-            model="nova-2",
-            smart_format=True,
-            language="hi"
-        )
+    async def process_captions(self, video_id, audio_path, output_path, target_lang="en", source_lang="hi"):
+        """
+        Main processing method that handles:
+        - YouTube transcript extraction (if available)
+        - Speech-to-text fallback
+        - Translation
+        """
+        temp_vtt = f"temp_{video_id}.vtt"
+        final_output = f"translated_{output_path}"
 
-        # Transcribe the audio file
-        response = deepgram.listen.rest.v("1").transcribe_file(payload, options)
+        # Try YouTube transcript first
+        if not self._get_youtube_transcript(video_id, temp_vtt):
+            # Fallback to audio transcription
+            if not self._deepgram_transcribe(audio_path, temp_vtt, source_lang):
+                return False
 
-        # Convert Deepgram response to WebVTT format
-        transcription = DeepgramConverter(response.to_dict())
-        captions = webvtt(transcription)
+        # Translate if needed
+        if target_lang != source_lang:
+            if not await self._translate_vtt(temp_vtt, final_output, target_lang):
+                return False
+            os.remove(temp_vtt)  # Cleanup temporary file
+        else:
+            os.rename(temp_vtt, final_output)
 
-        # Save the WebVTT file
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(captions)
+        print(f"Processing complete. Output at: {final_output}")
+        return True
 
-        print(f"Captions successfully extracted and saved to {output_file}")
+# Usage example
+async def main():
+    processor = CaptionProcessor()
     
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
+    await processor.process_captions(
+        video_id="ftDsSB3F5kg",
+        audio_path="C:/Users/Bhavesh/Desktop/mindflix/uploads/videos/निर्देशक की भूमिका भाग - 1.f140.m4a",
+        output_path="final_captions.vtt",
+        target_lang="en",
+        source_lang="hi"
+    )
 
-
-
-
-async def translate_captions(input_file, output_file, target_language="en"):
-    translator = Translator()
-
-    # Read WebVTT file
-    vtt = wvt.read(input_file)
-    for caption in vtt:
-        translated = await translator.translate(caption.text, dest=target_language)  # Use 'await' here
-        caption.text = translated.text
-
-    vtt.save(output_file)
-    print(f"Translated captions saved to {output_file}")
-
-
-
-# # Usage example
-# if __name__ == "__main__":
-#     audio_file = "C:/Users/Bhavesh/Desktop/mindflix/uploads/videos/निर्देशक की भूमिका भाग - 1.f140.m4a"
-#     output_file = "C:/Users/Bhavesh/Desktop/mindflix/video_rag/captions.vtt"
-#     extract_audio_captions(audio_file, output_file)
-#     asyncio.run(translate_captions(output_file,"output_captions.vtt"))
+if __name__ == "__main__":
+    asyncio.run(main())
