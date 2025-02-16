@@ -13,5 +13,7 @@ accelerate
 chromadb
 django
 djangorestframework
+sentence_transformers
+langchain
 
 
