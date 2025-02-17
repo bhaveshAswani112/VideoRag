@@ -3,9 +3,21 @@ import torch
 import cv2
 from tqdm import tqdm
 import logging
+import os
+import sys
+import django
+from django.conf import settings
+
+# Setup Django environment
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "video_rag.settings")
+django.setup()
 
 class SceneExtractor:
-    def __init__(self, interval=10, batch_size=16):
+    def __init__(self, interval=2, batch_size=16):
         self.interval = interval
         self.batch_size = batch_size
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -40,10 +52,16 @@ class SceneExtractor:
                 if len(frames_to_process) == self.batch_size or frame_count + frame_interval >= total_frames:
                     batch_descriptions = self._describe_frames(frames_to_process)
                     for time, description in zip(frame_times, batch_descriptions):
+                        # Ensure start_time is a float
+                        start_time = self._convert_to_float(time)
+                        end_time = start_time + self.interval
+
                         scenes.append({
-                            "start_time": time,
+                            "start_time": start_time,
+                            "end_time": end_time,
                             "description": description
                         })
+
                     frames_to_process = []
                     frame_times = []
 
@@ -63,8 +81,16 @@ class SceneExtractor:
             logging.error(f"Error in frame description: {str(e)}")
             return ["Error in description"] * len(frames)
 
+    def _convert_to_float(self, value):
+        """Safely convert start_time to a float (from string or int)."""
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            logging.warning(f"Invalid time value: {value}. Defaulting to 0.0.")
+            return 0.0
+
+
 if __name__ == "__main__":
     sc = SceneExtractor()
-    scenes = sc.extract("C:/Users/Aryan/VideoRag/uploads/videos/निर्देशक की भूमिका भाग - 1.f137.mp4")
-    for scene in scenes:
-        print(f"Time: {scene['start_time']:.2f}s, Description: {scene['description']}")
+    scenes = sc.extract(os.path.join(settings.BASE_DIR, 'uploads', 'videos', '-1.mp4'))
+    print(scenes)

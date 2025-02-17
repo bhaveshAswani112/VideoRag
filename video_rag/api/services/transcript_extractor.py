@@ -34,6 +34,8 @@ class CaptionProcessor:
     def _get_best_transcript(self, video_id: str) -> Tuple[Optional[list], Optional[str]]:
         """Get the best available transcript with language detection"""
         try:
+            print(video_id)
+            
             transcripts = YouTubeTranscriptApi.list_transcripts(video_id)
             
             # Try English first
@@ -70,7 +72,7 @@ class CaptionProcessor:
             async with aiofiles.open(audio_file, "rb") as file:
                 buffer_data = await file.read()
 
-            response = await self.deepgram.listen.rest.v("1").transcribe_file(
+            response = self.deepgram.listen.rest.v("1").transcribe_file(
                 {"buffer": buffer_data},
                 PrerecordedOptions(
                     model="nova-2",
@@ -80,7 +82,7 @@ class CaptionProcessor:
             )
             
             async with aiofiles.open(output_file, 'w', encoding='utf-8') as f:
-                await f.write(webvtt(DeepgramConverter(response.to_dict())))
+                f.write(webvtt(DeepgramConverter(response.to_dict())))
             return True
         except Exception as e:
             self.logger.error(f"Deepgram transcription failed: {str(e)}")
@@ -100,6 +102,7 @@ class CaptionProcessor:
 
         # Try YouTube transcripts
         transcript, detected_lang = self._get_best_transcript(video_id)
+        print(transcript)
         if transcript:
             if not await self._save_transcript(transcript, temp_vtt):
                 return False
@@ -129,8 +132,8 @@ async def main():
     processor = CaptionProcessor(deepgram_api_key="17bdd81afce172d05d26e239264c1c274e76bbfe")
     
     result = await processor.process_captions(
-        video_id="UaGJdSUA_RM",
-        audio_path="path/to/audio/file.m4a",
+        video_id="ry9SYnV3svc",
+        audio_path="C:/Users/Bhavesh/Desktop\mindflix/video_rag/uploads/videos\small-talk-everyday-english.m4a",
         output_path="final_captions.vtt",
         target_lang="en",
         fallback_lang="hi" 

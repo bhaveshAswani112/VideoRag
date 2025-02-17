@@ -5,6 +5,9 @@ import django
 from django.conf import settings
 import logging
 from typing import Optional, Tuple
+from slugify import slugify
+from unidecode import unidecode
+import re
 
 # Setup Django environment
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,63 +25,139 @@ class VideoDownloader:
         os.makedirs(self.output_dir, exist_ok=True)
         self.logger = logging.getLogger(__name__)
 
-    def download_video_and_audio(self, url: str) -> Tuple[str, str]:
+    def custom_slugify(self, text): 
+        # Transliterate Hindi characters to their closest ASCII equivalents
+        text = unidecode(text)
+        # Convert to lowercase
+        text = text.lower()
+        # Replace spaces with hyphens
+        text = re.sub(r'\s+', '-', text)
+        # Remove non-word characters (except hyphens)
+        text = re.sub(r'[^\w\-]', '', text)
+        # Remove consecutive hyphens
+        text = re.sub(r'\-+', '-', text)
+        return text.strip('-')
+
+    def get_video_title(self, url: str) -> str:
         """
-        Download both video and audio from the given URL.
-        
-        :param url: URL of the video to download
-        :return: Tuple containing paths to the downloaded video and audio files
+        Retrieve the title of the video from the given URL.
+
+        :param url: URL of the video
+        :return: Title of the video
         """
         try:
-            video_output_template = os.path.join(self.output_dir, '%(title)s.%(ext)s')
-            audio_output_template = os.path.join(self.output_dir, '%(title)s.%(ext)s')
-            
             cmd = [
                 "yt-dlp",
-                "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-                "-o", video_output_template,
-                "--extract-audio",
-                "--audio-format", "m4a",
-                "--audio-quality", "0",
-                "--keep-video",
-                "--no-playlist",
-                url,
+                "--get-title",
+                "--skip-download",
+                url
             ]
 
-            self.logger.info(f"Downloading video and audio from {url}")
+            self.logger.info(f"Fetching title for {url}")
             result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-            
-            video_path = None
-            audio_path = None
 
-            # Extract the output filenames from yt-dlp's output
-            for line in result.stdout.split('\n'):
-                if line.startswith('[download] Destination:'):
-                    file_path = line.split(': ', 1)[1]
-                    if file_path.endswith('.mp4'):
-                        video_path = file_path
-                    elif file_path.endswith('.m4a'):
-                        audio_path = file_path
+            title = result.stdout.strip()
 
-            if not video_path or not audio_path:
-                raise Exception("Could not determine output filenames")
+            if not title:
+                raise Exception("Could not retrieve video title")
 
-            return video_path, audio_path
+            return self.custom_slugify(title)
 
         except subprocess.CalledProcessError as e:
-            self.logger.error(f"Failed to download video and audio: {e}")
+            self.logger.error(f"Failed to fetch video title: {e}")
             self.logger.error(f"Command output: {e.output}")
             raise
         except Exception as e:
             self.logger.error(f"An error occurred: {e}")
             raise
 
+    def get_video_description(self, url: str) -> str:
+        """
+        Retrieve the description of the video from the given URL.
+
+        :param url: URL of the video
+        :return: Description of the video
+        """
+        try:
+            cmd = [
+                "yt-dlp",
+                "--get-description",
+                "--skip-download",
+                url
+            ]
+
+            self.logger.info(f"Fetching description for {url}")
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+            description = result.stdout.strip()
+
+            if not description:
+                self.logger.warning("Could not retrieve video description")
+                return ""
+
+            return description
+
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"Failed to fetch video description: {e}")
+            self.logger.error(f"Command output: {e.output}")
+            raise
+        except Exception as e:
+            self.logger.error(f"An error occurred: {e}")
+            raise
+
+    def download_video_and_audio(self, url: str) -> Tuple[str, str, str]:
+        """
+        Download both video and audio from the given URL.
+
+        :param url: URL of the video to download
+        :return: Tuple containing paths to the downloaded video and audio files, and the video title
+        """
+        try:
+            title = self.get_video_title(url)
+            description = self.get_video_description(url)
+
+            video_output = os.path.join(self.output_dir, f"{title}.mp4")
+            audio_output = os.path.join(self.output_dir, f"{title}.m4a")
+
+            video_cmd = [
+                "yt-dlp",
+                "-f", "bestvideo[ext=mp4]",
+                "-o", video_output,
+                url
+            ]
+
+            audio_cmd = [
+                "yt-dlp",
+                "-f", "bestaudio[ext=m4a]",
+                "-o", audio_output,
+                url
+            ]
+
+            self.logger.info(f"Downloading video for {url}")
+            subprocess.run(video_cmd, check=True)
+
+            self.logger.info(f"Downloading audio for {url}")
+            subprocess.run(audio_cmd, check=True)
+
+            return video_output, audio_output, title, description
+
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"Failed to download video or audio: {e}")
+            self.logger.error(f"Command output: {e.output}")
+            raise
+        except Exception as e:
+            self.logger.error(f"An error occurred: {e}")
+            raise
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     vd = VideoDownloader()
     try:
-        video_path, audio_path = vd.download_video_and_audio("https://www.youtube.com/watch?v=lTxn2BuqyzU")
+        video_path, audio_path, title, description = vd.download_video_and_audio("https://www.youtube.com/watch?v=ftDsSB3F5kg")
         print(f"Video downloaded to: {video_path}")
         print(f"Audio downloaded to: {audio_path}")
+        print(f"Title: {title}")
+        print(f"Description: {description}...")  
     except Exception as e:
         print(f"Failed to download video and audio: {e}")

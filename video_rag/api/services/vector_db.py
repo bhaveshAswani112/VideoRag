@@ -14,27 +14,38 @@ class VectorDBStore:
 
     def add_chunks(self, metadata: dict):
         documents = []
-        metadatas = []
-
+        
+        # For transcript chunks
         for chunk in metadata["transcript_chunks"]:
-            documents.append(Document(page_content=chunk["text"]))
-            metadatas.append({
-                "type": "transcript",
-                "start_time": chunk["start_time"],
-                "end_time": chunk["end_time"],
-                "video_uri": metadata["video_uri"]
-            })
+            documents.append(Document(
+                page_content=f"Transcript: {chunk['text']}",  
+                metadata={
+                    "type": "transcript",
+                    "start_time": chunk["start_time"],
+                    "end_time": chunk["end_time"],
+                    "video_uri": metadata["video_uri"],
+                    "title": chunk["title"],
+                    "description": chunk.get("description", "N/A")  
+                }
+            ))
 
+        # For scene chunks
         for chunk in metadata["scene_chunks"]:
-            text = ". ".join(chunk["descriptions"])
-            documents.append(Document(page_content=text))
-            metadatas.append({
-                "type": "scene",
-                "start_time": chunk["start_time"],
-                "video_uri": metadata["video_uri"]
-            })
+            documents.append(Document(
+                page_content=f"Scene: {chunk['description']}", 
+                metadata={
+                    "type": "scene",
+                    "start_time": chunk["start_time"],
+                    "end_time": chunk.get("end_time", chunk["start_time"] + 2),  # Handle missing end_time
+                    "video_uri": metadata["video_uri"],
+                    "title": chunk["title"],
+                    "description": chunk["description"]
+                }
+            ))
 
-        self.vector_store.add_documents(documents=documents, metadatas=metadatas)
+        # Single call with proper document structure
+        self.vector_store.add_documents(documents=documents)
+
 
     def persist(self):
         self.vector_store.persist()
