@@ -32,7 +32,7 @@ class VectorDBStore:
         # For scene chunks
         for chunk in metadata["scene_chunks"]:
             documents.append(Document(
-                page_content=f"Scene: {chunk['description']}", 
+                page_content=f"Scene: {chunk['text']}", 
                 metadata={
                     "type": "scene",
                     "start_time": chunk["start_time"],

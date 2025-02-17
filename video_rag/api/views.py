@@ -69,7 +69,7 @@ class VideoProcessingAPIView(APIView):
                 "transcript_chunks": transcript_chunks,
                 "scene_chunks": scene_chunks,
             })
-            vector_db.persist()
+            
             print(title)
             return Response({
             "message": "Video processed successfully",
@@ -155,7 +155,6 @@ class VideoQueryAPIView(APIView):
                 model_name=model_name,
                 api_key=os.getenv("GROQ_API_KEY")  
             )
-
             # Create processing chain
             prompt = ChatPromptTemplate.from_template(
                 """You are an AI assistant tasked with analyzing the content of a video and answering a given question with clarity and accuracy. 

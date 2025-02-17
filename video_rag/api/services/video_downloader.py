@@ -5,9 +5,10 @@ import django
 from django.conf import settings
 import logging
 from typing import Optional, Tuple
-from slugify import slugify
+from slugify import slugify as python_slugify
 from unidecode import unidecode
 import re
+
 
 # Setup Django environment
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -61,7 +62,7 @@ class VideoDownloader:
             if not title:
                 raise Exception("Could not retrieve video title")
 
-            return self.custom_slugify(title)
+            return python_slugify(title,allow_unicode=True)
 
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Failed to fetch video title: {e}")

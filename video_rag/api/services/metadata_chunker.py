@@ -20,11 +20,12 @@ class MetadataChunker:
 
     def chunk_scenes(self, scenes: List[Dict], title: str, description: str) -> List[Dict]:
         """Store scene descriptions as-is while preserving metadata."""
+        print(scenes)
         return [
             {
                 "start_time": scene["start_time"],
                 "end_time": scene["end_time"],
-                "description": scene["description"],
+                "text": scene["description"],
                 "title": title,
                 "description": description,
             }
